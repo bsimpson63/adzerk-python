@@ -116,12 +116,6 @@ class Base(object):
         url = '/'.join([self._base_url, self._name, str(self.id)])
         data = self._to_data()
         response = requests.put(url, headers=self._headers(), data=data)
-        try:
-            item = handle_response(response)
-        except AdzerkError:
-            for attr, val in orignals.iteritems():
-                setattr(self, attr, val)
-            raise
 
     def update(self, **updates):
         url = '/'.join([self._base_url, self._name, str(self.id)])
