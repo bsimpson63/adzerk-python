@@ -275,10 +275,13 @@ class Campaign(Base):
         ('IsActive', 'is_active'),
         ('Price', 'price'),
     )
-    _optional = {'flights', 'end_date'}
+    _optional = {'end_date'}
 
     @classmethod
     def _from_items(cls, items):
+        for item in items:
+            if not 'Flights' in item:
+                item['Flights'] = []
         things = super(cls, cls)._from_items(items)
         for thing in things:
             if hasattr(thing, 'flights'):
