@@ -110,7 +110,7 @@ class Base(object):
         data = thing._to_data()
         response = requests.post(url, headers=cls._headers(), data=data)
         item = handle_response(response)
-        return cls._from_items([item])
+        return cls._from_items([item])[0]
 
     def _send(self):
         url = '/'.join([self._base_url, self._name, str(self.id)])
