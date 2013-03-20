@@ -211,9 +211,9 @@ class Flight(Base):
         ('IsFriday', 'is_friday'),
         ('IsSaturday', 'is_saturday'),
     )
-    _optional = {'end_date', 'no_end_date', 'goal_type', 'is_freq_cap',
-                 'freq_cap', 'freq_cap_duration', 'freq_cap_type',
-                 'keywords', 'user_agent_keywords',
+    _optional = {'end_date', 'no_end_date', 'goal_type', 'rate_type', 
+                 'is_freq_cap', 'freq_cap', 'freq_cap_duration',
+                 'freq_cap_type', 'keywords', 'user_agent_keywords',
                  'date_parting_start_time', 'date_parting_end_time',
                  'is_sunday', 'is_monday', 'is_tuesday', 'is_wednesday',
                  'is_thursday', 'is_friday', 'is_saturday'}
