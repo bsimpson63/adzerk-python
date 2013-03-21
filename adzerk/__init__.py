@@ -67,17 +67,14 @@ class Base(object):
             setattr(self, attr, val)
 
     @classmethod
-    def _from_items(cls, items):
-        r = []
-        for item in items:
-            id = item['Id']
-            attrs = {}
-            for remote, local in cls._attr_map:
-                if local not in cls._optional or item.has_key(remote):
-                    attrs[local] = item[remote]
-            thing = cls(id, **attrs)
-            r.append(thing)
-        return r
+    def _from_item(cls, item):
+        id = item['Id']
+        attrs = {}
+        for remote, local in cls._attr_map:
+            if local not in cls._optional or item.has_key(remote):
+                attrs[local] = item[remote]
+        thing = cls(id, **attrs)
+        return thing
 
     def _to_item(self):
         item = {'Id': self.id}
@@ -94,8 +91,9 @@ class Base(object):
         url = '/'.join([cls._base_url, cls._name])
         response = requests.get(url, headers=cls._headers())
         content = handle_response(response)
-        if content['Items']:
-            return cls._from_items(content['Items'])
+        items = content.get('Items')
+        if items:
+            return [cls._from_item(item) for item in items]
 
     @classmethod
     def create(cls, **attr):
@@ -110,7 +108,7 @@ class Base(object):
         data = thing._to_data()
         response = requests.post(url, headers=cls._headers(), data=data)
         item = handle_response(response)
-        return cls._from_items([item])[0]
+        return cls._from_item(item)
 
     def _send(self):
         url = '/'.join([self._base_url, self._name, str(self.id)])
@@ -138,7 +136,46 @@ class Base(object):
         url = '/'.join([cls._base_url, cls._name, str(id)])
         response = requests.get(url, headers=cls._headers())
         item = handle_response(response)
-        return cls._from_items([item])[0]
+        return cls._from_item(item)
+
+
+class Map(Base):
+    parent = None
+    child = None
+
+    @classmethod
+    def list(cls, parent_id):
+        url = '/'.join([cls._base_url, cls.parent._name, str(parent_id),
+                        cls.child._name + 's'])
+        response = requests.get(url, headers=cls._headers())
+        content = handle_response(response)
+        items = content.get('Items')
+        if items:
+            return [cls._from_item(item) for item in items]
+
+    @classmethod
+    def create(cls, parent_id, **attr):
+        url = '/'.join([cls._base_url, cls.parent._name, str(parent_id),
+                        cls.child._name])
+        missing = set([local for remote, local in cls._attr_map])
+        missing -= cls._optional
+        missing -= set(attr.keys())
+        if missing:
+            missing = ', '.join(missing)
+            raise ValueError("missing required attributes: %s" % missing)
+        thing = cls(None, **attr)
+        data = thing._to_data()
+        response = requests.post(url, headers=cls._headers(), data=data)
+        item = handle_response(response)
+        return cls._from_item(item)
+
+    @classmethod
+    def get(cls, parent_id, id):
+        url = '/'.join([cls._base_url, cls.parent._name, str(parent_id),
+                        cls.child._name, str(id)])
+        response = requests.get(url, headers=cls._headers())
+        item = handle_response(response)
+        return cls._from_item(item)
 
 
 class Site(Base):
@@ -248,6 +285,89 @@ class Priority(Base):
         return '<Priority %s <Weight %s - Channel %s>>' % (self.id, self.weight,
                                                            self.channel_id)
 
+
+class Creative(Base):
+    _name = 'creative'
+    _attr_map = (
+        ('Title', 'name'),
+        ('Body', 'body'),
+        ('Url', 'url'),
+        ('AdvertiserId', 'advertiser_id'),
+        ('AdTypeId', 'ad_type_id'),
+        ('ImageName', 'image_name'),
+        ('Alt', 'alt'),
+        ('IsHTMLJS', 'is_html_js'),
+        ('ScriptBody', 'script_body'),
+        ('IsSync', 'is_sync'),
+        ('IsDeleted', 'is_deleted'),
+        ('IsActive', 'is_active'),
+    )
+    _optional = {'image_name', 'url', 'is_html_js', 'script_body'}
+
+    @classmethod
+    def list(cls, advertiser_id):
+        url = '/'.join([cls._base_url, 'advertiser', str(advertiser_id),
+                        'creatives'])
+        response = requests.get(url, headers=cls._headers())
+        content = handle_response(response)
+        items = content.get('Items')
+        if items:
+            return [cls._from_item(item) for item in items]
+
+    def __repr__(self):
+        return '<Creative %s>' % (self.id)
+
+
+class CreativeFlightMap(Map):
+    parent = Flight
+    child = Creative
+
+    _name = 'creative'
+    _attr_map = (
+        ('SizeOverride', 'size_override'),
+        ('CampaignId', 'campaign_id'),
+        ('PublisherAccountId', 'publisher_account_id'),
+        ('IsDeleted', 'is_deleted'),
+        ('Percentage', 'percentage'),
+        ('Iframe', 'iframe'),
+        ('Creative', 'creative'),
+        ('IsActive', 'is_active'),
+        ('FlightId', 'flight_id'),
+        ('Impressions', 'impressions'),
+        ('SiteId', 'site_id'),
+        ('ZoneId', 'zone_id'),
+    )
+    _optional = {'site_id', 'zone_id'}
+
+    @classmethod
+    def _from_item(cls, item):
+        if not 'SizeOverride' in item:
+            item['SizeOverride'] = False    # response doesn't always include, is it optional?
+        if not 'Iframe' in item:
+            item['Iframe'] = False
+        thing = super(cls, cls)._from_item(item)
+        if hasattr(thing, 'creative'):
+            thing.creative = Creative._from_item(thing.creative)
+        return thing
+
+    def _to_item(self):
+        item = Base._to_item(self)
+        creative = item.get('creative')
+        if creative:
+            if creative.id:
+                item['creative'] = {'Id': creative.id}
+            else:
+                item['creative'] = creative._to_item()
+        return item
+
+    def __repr__(self):
+        return '<CreativeFlightMap %s <Creative %s - Flight %s>>' % (
+            self.id,
+            self.creative.id,
+            self.flight_id,
+        )
+
+
 class Channel(Base):
     _name = 'channel'
     _attr_map = (
@@ -261,6 +381,22 @@ class Channel(Base):
 
     def __repr__(self):
         return '<Channel %s>' % (self.id)
+
+
+class Publisher(Base):
+    _name = 'publisher'
+    _attr_map = (
+        ('FirstName', 'first_name'),
+        ('LastName', 'last_name'),
+        ('CompanyName', 'company_name'),
+        ('PaypalEmail', 'paypal_email'),
+        ('PaymentOption', 'payment_option'), # 1: Paypal, 0: check
+        ('Address', 'address'),
+    )
+    _optional = {'company_name'}
+
+    def __repr__(self):
+        return '<Publisher %s>' % (self.id)
 
 
 class Campaign(Base):
@@ -278,15 +414,14 @@ class Campaign(Base):
     _optional = {'end_date'}
 
     @classmethod
-    def _from_items(cls, items):
-        for item in items:
-            if not 'Flights' in item:
-                item['Flights'] = []
-        things = super(cls, cls)._from_items(items)
-        for thing in things:
-            if hasattr(thing, 'flights'):
-                thing.flights = Flight._from_items(thing.flights)
-        return things
+    def _from_item(cls, item):
+        if not 'Flights' in item:
+            item['Flights'] = []
+        thing = super(cls, cls)._from_item(item)
+        if hasattr(thing, 'flights'):
+            thing.flights = [Flight._from_item(flight)
+                             for flight in thing.flights]
+        return thing
 
     def _to_item(self):
         item = Base._to_item(self)
