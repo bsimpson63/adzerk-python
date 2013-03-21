@@ -53,7 +53,7 @@ freq_cap_types = {
 class Base(object):
     _name = ''
     _base_url = 'http://api.adzerk.net/v1'
-    _attr_map = ()
+    _fields = {}
     _optional = {}
 
     @classmethod
@@ -61,26 +61,36 @@ class Base(object):
         return {'X-Adzerk-ApiKey': API_KEY,
                 'Content-Type': 'application/x-www-form-urlencoded'}
 
-    def __init__(self, id, **attr):
-        self.id = id
+    def __init__(self, Id, **attr):
+        self.Id = Id
+        missing = self._fields - set(attr.keys()) - self._optional
+        if missing:
+            missing = ', '.join(missing)
+            raise ValueError('missing required attributes: %s' % missing)
+        extra = set(attr.keys()) - self._fields
+        if extra:
+            extra = ', '.join(extra)
+            raise ValueError('unrecognized attributes: %s' % extra)
+
         for attr, val in attr.iteritems():
             setattr(self, attr, val)
 
+    def __setattr__(self, attr, val):
+        if attr not in self._fields and attr != 'Id':
+            raise ValueError('unrecognized attribute: %s' % attr)
+        object.__setattr__(self, attr, val)
+
     @classmethod
     def _from_item(cls, item):
-        id = item['Id']
-        attrs = {}
-        for remote, local in cls._attr_map:
-            if local not in cls._optional or item.has_key(remote):
-                attrs[local] = item[remote]
-        thing = cls(id, **attrs)
+        Id = item.pop('Id')
+        thing = cls(Id, **item)
         return thing
 
     def _to_item(self):
-        item = {'Id': self.id}
-        for remote, local in self._attr_map:
-            if local not in self._optional or hasattr(self, local):
-                item[remote] = getattr(self, local)
+        item = {'Id': self.Id}
+        for attr in self._fields:
+            if hasattr(self, attr):
+                item[attr] = getattr(self, attr)
         return item
 
     def _to_data(self):
@@ -98,12 +108,6 @@ class Base(object):
     @classmethod
     def create(cls, **attr):
         url = '/'.join([cls._base_url, cls._name])
-        missing = set([local for remote, local in cls._attr_map])
-        missing -= cls._optional
-        missing -= set(attr.keys())
-        if missing:
-            missing = ', '.join(missing)
-            raise ValueError("missing required attributes: %s" % missing)
         thing = cls(None, **attr)
         data = thing._to_data()
         response = requests.post(url, headers=cls._headers(), data=data)
@@ -111,12 +115,12 @@ class Base(object):
         return cls._from_item(item)
 
     def _send(self):
-        url = '/'.join([self._base_url, self._name, str(self.id)])
+        url = '/'.join([self._base_url, self._name, str(self.Id)])
         data = self._to_data()
         response = requests.put(url, headers=self._headers(), data=data)
 
     def update(self, **updates):
-        url = '/'.join([self._base_url, self._name, str(self.id)])
+        url = '/'.join([self._base_url, self._name, str(self.Id)])
         originals = {}
         for attr, val in updates.iteritems():
             originals[attr] = getattr(self, attr)
@@ -132,8 +136,8 @@ class Base(object):
         # return self? either modify self and don't return, or return new modified object
 
     @classmethod
-    def get(cls, id):
-        url = '/'.join([cls._base_url, cls._name, str(id)])
+    def get(cls, Id):
+        url = '/'.join([cls._base_url, cls._name, str(Id)])
         response = requests.get(url, headers=cls._headers())
         item = handle_response(response)
         return cls._from_item(item)
@@ -144,8 +148,8 @@ class Map(Base):
     child = None
 
     @classmethod
-    def list(cls, parent_id):
-        url = '/'.join([cls._base_url, cls.parent._name, str(parent_id),
+    def list(cls, ParentId):
+        url = '/'.join([cls._base_url, cls.parent._name, str(ParentId),
                         cls.child._name + 's'])
         response = requests.get(url, headers=cls._headers())
         content = handle_response(response)
@@ -154,15 +158,9 @@ class Map(Base):
             return [cls._from_item(item) for item in items]
 
     @classmethod
-    def create(cls, parent_id, **attr):
-        url = '/'.join([cls._base_url, cls.parent._name, str(parent_id),
+    def create(cls, ParentId, **attr):
+        url = '/'.join([cls._base_url, cls.parent._name, str(ParentId),
                         cls.child._name])
-        missing = set([local for remote, local in cls._attr_map])
-        missing -= cls._optional
-        missing -= set(attr.keys())
-        if missing:
-            missing = ', '.join(missing)
-            raise ValueError("missing required attributes: %s" % missing)
         thing = cls(None, **attr)
         data = thing._to_data()
         response = requests.post(url, headers=cls._headers(), data=data)
@@ -170,9 +168,9 @@ class Map(Base):
         return cls._from_item(item)
 
     @classmethod
-    def get(cls, parent_id, id):
-        url = '/'.join([cls._base_url, cls.parent._name, str(parent_id),
-                        cls.child._name, str(id)])
+    def get(cls, ParentId, Id):
+        url = '/'.join([cls._base_url, cls.parent._name, str(ParentId),
+                        cls.child._name, str(Id)])
         response = requests.get(url, headers=cls._headers())
         item = handle_response(response)
         return cls._from_item(item)
@@ -180,133 +178,104 @@ class Map(Base):
 
 class Site(Base):
     _name = 'site'
-    _attr_map = (
-        ('Url', 'url'),
-        ('Title', 'title'),
-    )
+    _fields = {'Url', 'Title'}
 
     def __repr__(self):
-        return '<Site %s <%s-%s>>' % (self.id, self.title, self.url)
+        return '<Site %s <%s-%s>>' % (self.Id, self.Title, self.url)
 
 
 class Zone(Base):
     _name = 'zone'
-    _attr_map = (
-        ('Name', 'name'),
-        ('SiteId', 'site_id'),
-    )
+    _fields = {'Name', 'SiteId'}
 
     def __repr__(self):
-        return '<Zone %s <%s on %s>>' % (self.id, self.name, self.site_id)
+        return '<Zone %s <%s on %s>>' % (self.Id, self.Name, self.SiteId)
 
 
 class Advertiser(Base):
     _name = 'advertiser'
-    _attr_map = (
-        ('Title', 'name'),
-    )
+    _fields = {'Title'}
 
     @classmethod
-    def search(cls, name):
+    def search(cls, Title):
         raise NotImplementedError
 
     def __repr__(self):
-        return '<Advertiser %s <%s>>' % (self.id, self.name)
+        return '<Advertiser %s <%s>>' % (self.Id, self.Title)
 
 
 class Flight(Base):
     _name = 'flight'
-    _attr_map = (
-        ('StartDate', 'start_date'),
-        ('EndDate', 'end_date'),
-        ('NoEndDate', 'no_end_date'),
-        ('Price', 'price'),
-        ('OptionType', 'option_type'),  # 1 - CPM, 2- Remainder
-        ('Impressions', 'impressions'),
-        ('IsUnlimited', 'is_unlimited'), # bool: override Impressions
-        ('IsNoDuplicates', 'is_no_duplicates'),
-        ('IsFullSpeed', 'is_full_speed'),   # bool: serve fast as possible
-        ('Keywords', 'keywords'),
-        ('UserAgentKeywords', 'user_agent_keywords'),
-        ('CampaignId', 'campaign_id'),
-        ('PriorityId', 'priority_id'),
-        ('IsDeleted', 'is_deleted'),
-        ('IsActive', 'is_active'),
-        ('GoalType', 'goal_type'),
-        ('RateType', 'rate_type'),
-        ('IsFreqCap', 'is_freq_cap'),
-        ('FreqCap', 'freq_cap'),
-        ('FreqCapDuration', 'freq_cap_duration'),
-        ('FreqCapType', 'freq_cap_type'),
-        ('DatePartingStartTime', 'date_parting_start_time'),
-        ('DatePartingEndTime', 'date_parting_end_time'),
-        ('IsSunday', 'is_sunday'),
-        ('IsMonday', 'is_monday'),
-        ('IsTuesday', 'is_tuesday'),
-        ('IsWednesday', 'is_wednesday'),
-        ('IsThursday', 'is_thursday'),
-        ('IsFriday', 'is_friday'),
-        ('IsSaturday', 'is_saturday'),
-    )
-    _optional = {'end_date', 'no_end_date', 'goal_type', 'rate_type', 
-                 'is_freq_cap', 'freq_cap', 'freq_cap_duration',
-                 'freq_cap_type', 'keywords', 'user_agent_keywords',
-                 'date_parting_start_time', 'date_parting_end_time',
-                 'is_sunday', 'is_monday', 'is_tuesday', 'is_wednesday',
-                 'is_thursday', 'is_friday', 'is_saturday'}
+    _fields = {'Name', 'StartDate', 'EndDate', 'NoEndDate', 'Price',
+               'OptionType', 'Impressions', 'IsUnlimited', 'IsNoDuplicates',
+               'IsFullSpeed', 'Keywords', 'UserAgentKeywords', 'CampaignId',
+               'PriorityId', 'IsDeleted', 'IsActive', 'GoalType', 'RateType',
+               'IsFreqCap', 'FreqCap', 'FreqCapDuration', 'FreqCapType',
+               'DatePartingStartTime', 'DatePartingEndTime', 'IsSunday',
+               'IsMonday', 'IsTuesday', 'IsWednesday', 'IsThursday', 'IsFriday',
+               'IsSaturday', 'IPTargeting', 'GeoTargeting', 'CreativeMaps',
+               'ReferrerKeywords', 'WeightOverride'}
+    _optional = {'EndDate', 'NoEndDate', 'GoalType', 'RateType', 'IsFreqCap',
+                 'FreqCap', 'FreqCapDuration', 'FreqCapType', 'Keywords',
+                 'UserAgentKeywords', 'DatePartingStartTime',
+                 'DatePartingEndTime', 'IsSunday', 'IsMonday', 'IsTuesday',
+                 'IsWednesday', 'IsThursday', 'IsFriday', 'IsSaturday',
+                 'IPTargeting', 'GeoTargeting', 'CreativeMaps',
+                 'ReferrerKeywords', 'WeightOverride'}
 
     @property
     def frequency_cap(self):
-        if not self.is_freq_cap:
+        if not self.IsFreqCap:
             return None
-        return '%s per %s %s' % (self.freq_cap, self.freq_cap_duration,
-                                 freq_cap_types[self.freq_cap_type])
+        return '%s per %s %s' % (self.FreqCap, self.FreqCapDuration,
+                                 freq_cap_types[self.FreqCapType])
 
     def set_daily_cap(self, impressions):
-        self.is_freq_cap = True
-        self.freq_cap_type = 2
-        self.freq_cap = impressions
-        self.freq_cap_duration = 1
+        self.IsFreqCap = True
+        self.FreqCapType = 2
+        self.FreqCap = impressions
+        self.FreqCapDuration = 1
+
+    @classmethod
+    def _from_item(cls, item):
+        if not 'CreativeMaps' in item:
+            item['CreativeMaps'] = []
+        thing = super(cls, cls)._from_item(item)
+        if hasattr(thing, 'CreativeMaps'):
+            thing.CreativeMaps = [CreativeFlightMap._from_item(item)
+                             for item in thing.CreativeMaps]
+        return thing
+
+    def _to_item(self):
+        item = Base._to_item(self)
+        cfm_things = item.get('CreativeMaps')
+        if cfm_things:
+            item['CreativeMaps'] = [thing._to_item() for thing in cfm_things]
+        return item
 
     def __repr__(self):
-        return '<Flight %s <Campaign %s>>' % (self.id, self.campaign_id)
+        return '<Flight %s <Campaign %s>>' % (self.Id, self.CampaignId)
 
 
 class Priority(Base):
     _name = 'priority'
-    _attr_map = (
-        ('Name', 'name'),
-        ('ChannelId', 'channel_id'),
-        ('Weight', 'weight'),
-        ('IsDeleted', 'is_deleted'),
-    )
+    _fields = {'Name', 'ChannelId', 'Weight', 'IsDeleted'}
 
     def __repr__(self):
-        return '<Priority %s <Weight %s - Channel %s>>' % (self.id, self.weight,
-                                                           self.channel_id)
+        return '<Priority %s <Weight %s - Channel %s>>' % (self.Id, self.Weight,
+                                                           self.ChannelId)
 
 
 class Creative(Base):
     _name = 'creative'
-    _attr_map = (
-        ('Title', 'name'),
-        ('Body', 'body'),
-        ('Url', 'url'),
-        ('AdvertiserId', 'advertiser_id'),
-        ('AdTypeId', 'ad_type_id'),
-        ('ImageName', 'image_name'),
-        ('Alt', 'alt'),
-        ('IsHTMLJS', 'is_html_js'),
-        ('ScriptBody', 'script_body'),
-        ('IsSync', 'is_sync'),
-        ('IsDeleted', 'is_deleted'),
-        ('IsActive', 'is_active'),
-    )
-    _optional = {'image_name', 'url', 'is_html_js', 'script_body'}
+    _fields = {'Title', 'Body', 'Url', 'AdvertiserId', 'AdTypeId', 'ImageName',
+               'Alt', 'IsHTMLJS', 'ScriptBody', 'IsSync', 'IsDeleted',
+               'IsActive'}
+    _optional = {'Url', 'ScriptBody', 'IsHTMLJS', 'ImageName'}
 
     @classmethod
-    def list(cls, advertiser_id):
-        url = '/'.join([cls._base_url, 'advertiser', str(advertiser_id),
+    def list(cls, AdvertiserId):
+        url = '/'.join([cls._base_url, 'advertiser', str(AdvertiserId),
                         'creatives'])
         response = requests.get(url, headers=cls._headers())
         content = handle_response(response)
@@ -315,7 +284,7 @@ class Creative(Base):
             return [cls._from_item(item) for item in items]
 
     def __repr__(self):
-        return '<Creative %s>' % (self.id)
+        return '<Creative %s>' % (self.Id)
 
 
 class CreativeFlightMap(Map):
@@ -323,21 +292,10 @@ class CreativeFlightMap(Map):
     child = Creative
 
     _name = 'creative'
-    _attr_map = (
-        ('SizeOverride', 'size_override'),
-        ('CampaignId', 'campaign_id'),
-        ('PublisherAccountId', 'publisher_account_id'),
-        ('IsDeleted', 'is_deleted'),
-        ('Percentage', 'percentage'),
-        ('Iframe', 'iframe'),
-        ('Creative', 'creative'),
-        ('IsActive', 'is_active'),
-        ('FlightId', 'flight_id'),
-        ('Impressions', 'impressions'),
-        ('SiteId', 'site_id'),
-        ('ZoneId', 'zone_id'),
-    )
-    _optional = {'site_id', 'zone_id'}
+    _fields = {'SizeOverride', 'CampaignId', 'PublisherAccountId', 'IsDeleted',
+               'Percentage', 'Iframe', 'Creative', 'IsActive', 'FlightId',
+               'Impressions', 'SiteId', 'ZoneId', 'DistributionType'}
+    _optional = {'SiteId', 'ZoneId'}
 
     @classmethod
     def _from_item(cls, item):
@@ -346,81 +304,60 @@ class CreativeFlightMap(Map):
         if not 'Iframe' in item:
             item['Iframe'] = False
         thing = super(cls, cls)._from_item(item)
-        if hasattr(thing, 'creative'):
-            thing.creative = Creative._from_item(thing.creative)
+        if hasattr(thing, 'Creative'):
+            thing.Creative = Creative._from_item(thing.Creative)
         return thing
 
     def _to_item(self):
         item = Base._to_item(self)
-        creative = item.get('creative')
+        creative = item.get('Creative')
         if creative:
-            if creative.id:
-                item['creative'] = {'Id': creative.id}
+            if creative.Id:
+                item['Creative'] = {'Id': creative.Id}
             else:
-                item['creative'] = creative._to_item()
+                item['Creative'] = creative._to_item()
         return item
 
     def __repr__(self):
         return '<CreativeFlightMap %s <Creative %s - Flight %s>>' % (
-            self.id,
-            self.creative.id,
-            self.flight_id,
+            self.Id,
+            self.Creative.Id,
+            self.FlightId,
         )
 
 
 class Channel(Base):
     _name = 'channel'
-    _attr_map = (
-        ('Title', 'name'),
-        ('Commission', 'commission'),
-        ('Engine', 'engine'),
-        ('Keywords', 'keywords'),   # comma separated string
-        ('CPM', 'cpm'),
-        ('AdTypes', 'ad_types')
-    )
+    _fields = {'Title', 'Commission', 'Engine', 'Keywords', 'CPM', 'AdTypes'}
 
     def __repr__(self):
-        return '<Channel %s>' % (self.id)
+        return '<Channel %s>' % (self.Id)
 
 
 class Publisher(Base):
     _name = 'publisher'
-    _attr_map = (
-        ('FirstName', 'first_name'),
-        ('LastName', 'last_name'),
-        ('CompanyName', 'company_name'),
-        ('PaypalEmail', 'paypal_email'),
-        ('PaymentOption', 'payment_option'), # 1: Paypal, 0: check
-        ('Address', 'address'),
-    )
-    _optional = {'company_name'}
+    _fields = {'FirstName', 'LastName', 'CompanyName', 'PaypalEmail',
+               'PaymentOption', 'Address'}
+    _optional = {'CompanyName'}
 
     def __repr__(self):
-        return '<Publisher %s>' % (self.id)
+        return '<Publisher %s>' % (self.Id)
 
 
 class Campaign(Base):
     _name = 'campaign'
-    _attr_map = (
-        ('Name', 'name'),
-        ('AdvertiserId', 'advertiser_id'),
-        ('Flights', 'flights'),
-        ('StartDate', 'start_date'),
-        ('EndDate', 'end_date'),
-        ('IsDeleted', 'is_deleted'),
-        ('IsActive', 'is_active'),
-        ('Price', 'price'),
-    )
-    _optional = {'end_date'}
+    _fields = {'Name', 'AdvertiserId', 'Flights', 'StartDate', 'EndDate',
+               'IsDeleted', 'IsActive', 'Price'}
+    _optional = {'EndDate'}
 
     @classmethod
     def _from_item(cls, item):
         if not 'Flights' in item:
             item['Flights'] = []
         thing = super(cls, cls)._from_item(item)
-        if hasattr(thing, 'flights'):
-            thing.flights = [Flight._from_item(flight)
-                             for flight in thing.flights]
+        if hasattr(thing, 'Flights'):
+            thing.Flights = [Flight._from_item(flight)
+                             for flight in thing.Flights]
         return thing
 
     def _to_item(self):
@@ -431,4 +368,4 @@ class Campaign(Base):
         return item
 
     def __repr__(self):
-        return '<Campaign %s>' % (self.id)
+        return '<Campaign %s>' % (self.Id)
