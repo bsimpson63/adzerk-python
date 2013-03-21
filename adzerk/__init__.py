@@ -54,7 +54,7 @@ class Base(object):
     _name = ''
     _base_url = 'http://api.adzerk.net/v1'
     _fields = {}
-    _optional = {}
+    _optional = set()
 
     @classmethod
     def _headers(cls):
