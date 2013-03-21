@@ -178,10 +178,11 @@ class Map(Base):
 
 class Site(Base):
     _name = 'site'
-    _fields = {'Url', 'Title'}
+    _fields = {'Url', 'Title', 'PublisherAccountId', 'IsDeleted'}
+    _optional = {'PublisherAccountId'}
 
     def __repr__(self):
-        return '<Site %s <%s-%s>>' % (self.Id, self.Title, self.url)
+        return '<Site %s <%s-%s>>' % (self.Id, self.Title, self.Url)
 
 
 class Zone(Base):
@@ -189,12 +190,13 @@ class Zone(Base):
     _fields = {'Name', 'SiteId'}
 
     def __repr__(self):
-        return '<Zone %s <%s on %s>>' % (self.Id, self.Name, self.SiteId)
+        return '<Zone %s <%s on Site %s>>' % (self.Id, self.Name, self.SiteId)
 
 
 class Advertiser(Base):
     _name = 'advertiser'
-    _fields = {'Title'}
+    _fields = {'Title', 'IsActive', 'IsDeleted'}
+    _optional = {'IsActive', 'IsDeleted'}
 
     @classmethod
     def search(cls, Title):
@@ -223,6 +225,9 @@ class Flight(Base):
                  'IPTargeting', 'GeoTargeting', 'CreativeMaps',
                  'ReferrerKeywords', 'WeightOverride'}
 
+    # list doesn't return CreativeMaps
+    # _send from results of list doesn't work?
+
     @property
     def frequency_cap(self):
         if not self.IsFreqCap:
@@ -238,6 +243,8 @@ class Flight(Base):
 
     @classmethod
     def _from_item(cls, item):
+        if not 'Name' in item:
+            item['Name'] = ''   # response doesn't always include, is it optional?
         if not 'CreativeMaps' in item:
             item['CreativeMaps'] = []
         thing = super(cls, cls)._from_item(item)
@@ -328,7 +335,8 @@ class CreativeFlightMap(Map):
 
 class Channel(Base):
     _name = 'channel'
-    _fields = {'Title', 'Commission', 'Engine', 'Keywords', 'CPM', 'AdTypes'}
+    _fields = {'Title', 'Commission', 'Engine', 'Keywords', 'CPM', 'AdTypes',
+               'IsDeleted'}
 
     def __repr__(self):
         return '<Channel %s>' % (self.Id)
@@ -337,8 +345,12 @@ class Channel(Base):
 class Publisher(Base):
     _name = 'publisher'
     _fields = {'FirstName', 'LastName', 'CompanyName', 'PaypalEmail',
-               'PaymentOption', 'Address'}
-    _optional = {'CompanyName'}
+               'PaymentOption', 'Address', 'IsDeleted'}
+    _optional = {'FirstName', 'LastName', 'CompanyName', 'PaypalEmail',
+                 'PaymentOption', 'Address'}
+    # are these actually optional?
+    # LastName, PaymentOption, PaypalEmail, FirstName, Address
+    # undocumented IsDeleted
 
     def __repr__(self):
         return '<Publisher %s>' % (self.Id)
