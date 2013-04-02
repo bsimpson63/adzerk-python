@@ -101,7 +101,7 @@ class Base(object):
         url = '/'.join([cls._base_url, cls._name])
         response = requests.get(url, headers=cls._headers())
         content = handle_response(response)
-        items = content.get('Items')
+        items = content.get('items')
         if items:
             return [cls._from_item(item) for item in items]
 
@@ -153,7 +153,7 @@ class Map(Base):
                         cls.child._name + 's'])
         response = requests.get(url, headers=cls._headers())
         content = handle_response(response)
-        items = content.get('Items')
+        items = content.get('items')
         if items:
             return [cls._from_item(item) for item in items]
 
@@ -227,6 +227,7 @@ class Flight(Base):
 
     # list doesn't return CreativeMaps
     # _send from results of list doesn't work?
+    # maybe need a _can_send property
 
     @property
     def frequency_cap(self):
@@ -286,7 +287,7 @@ class Creative(Base):
                         'creatives'])
         response = requests.get(url, headers=cls._headers())
         content = handle_response(response)
-        items = content.get('Items')
+        items = content.get('items')
         if items:
             return [cls._from_item(item) for item in items]
 
@@ -361,6 +362,8 @@ class Campaign(Base):
     _fields = {'Name', 'AdvertiserId', 'Flights', 'StartDate', 'EndDate',
                'IsDeleted', 'IsActive', 'Price'}
     _optional = {'EndDate'}
+
+    # no longer sending Flights?
 
     @classmethod
     def _from_item(cls, item):
