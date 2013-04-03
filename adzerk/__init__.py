@@ -217,13 +217,13 @@ class Flight(Base):
                'IsMonday', 'IsTuesday', 'IsWednesday', 'IsThursday', 'IsFriday',
                'IsSaturday', 'IPTargeting', 'GeoTargeting', 'CreativeMaps',
                'ReferrerKeywords', 'WeightOverride'}
-    _optional = {'EndDate', 'NoEndDate', 'GoalType', 'RateType', 'IsFreqCap',
-                 'FreqCap', 'FreqCapDuration', 'FreqCapType', 'Keywords',
-                 'UserAgentKeywords', 'DatePartingStartTime',
-                 'DatePartingEndTime', 'IsSunday', 'IsMonday', 'IsTuesday',
-                 'IsWednesday', 'IsThursday', 'IsFriday', 'IsSaturday',
-                 'IPTargeting', 'GeoTargeting', 'CreativeMaps',
-                 'ReferrerKeywords', 'WeightOverride'}
+    _optional = {'EndDate', 'NoEndDate', 'IsNoDuplicates', 'GoalType',
+                 'RateType', 'IsFreqCap', 'FreqCap', 'FreqCapDuration',
+                 'FreqCapType', 'Keywords', 'UserAgentKeywords',
+                 'DatePartingStartTime', 'DatePartingEndTime', 'IsSunday',
+                 'IsMonday', 'IsTuesday', 'IsWednesday', 'IsThursday',
+                 'IsFriday', 'IsSaturday', 'IPTargeting', 'GeoTargeting',
+                 'CreativeMaps', 'ReferrerKeywords', 'WeightOverride'}
 
     # list doesn't return CreativeMaps
     # _send from results of list doesn't work?
