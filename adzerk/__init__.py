@@ -50,10 +50,24 @@ freq_cap_types = {
 }
 
 
+class Stub(object):
+    def __init__(self, Id):
+        self.Id = Id
+
+    def _to_item(self):
+        return {'Id': self.Id}
+
+
+class Field(object):
+    def __init__(self, name, optional=False):
+        self.name = name
+        self.optional = optional
+
+
 class Base(object):
     _name = ''
     _base_url = 'http://api.adzerk.net/v1'
-    _fields = {}
+    _fields = set()
     _optional = set()
 
     @classmethod
@@ -67,13 +81,9 @@ class Base(object):
         if missing:
             missing = ', '.join(missing)
             raise ValueError('missing required attributes: %s' % missing)
-        extra = set(attr.keys()) - self._fields
-        if extra:
-            extra = ', '.join(extra)
-            raise ValueError('unrecognized attributes: %s' % extra)
 
         for attr, val in attr.iteritems():
-            setattr(self, attr, val)
+            self.__setattr__(attr, val)
 
     def __setattr__(self, attr, val):
         if attr not in self._fields and attr != 'Id':
@@ -87,7 +97,9 @@ class Base(object):
         return thing
 
     def _to_item(self):
-        item = {'Id': self.Id}
+        item = {}
+        if self.Id:
+            item['Id'] = self.Id
         for attr in self._fields:
             if hasattr(self, attr):
                 item[attr] = getattr(self, attr)
@@ -119,22 +131,6 @@ class Base(object):
         data = self._to_data()
         response = requests.put(url, headers=self._headers(), data=data)
 
-    def update(self, **updates):
-        url = '/'.join([self._base_url, self._name, str(self.Id)])
-        originals = {}
-        for attr, val in updates.iteritems():
-            originals[attr] = getattr(self, attr)
-            setattr(self, attr, val)
-        data = self._to_data()
-        response = requests.put(url, headers=self._headers(), data=data)
-        try:
-            item = handle_response(response)
-        except AdzerkError:
-            for attr, val in orignals.iteritems():
-                setattr(self, attr, val)
-            raise
-        # return self? either modify self and don't return, or return new modified object
-
     @classmethod
     def get(cls, Id):
         url = '/'.join([cls._base_url, cls._name, str(Id)])
@@ -145,6 +141,7 @@ class Base(object):
 
 class Map(Base):
     parent = None
+    parent_id_attr = 'ParentId'
     child = None
 
     @classmethod
@@ -166,6 +163,13 @@ class Map(Base):
         response = requests.post(url, headers=cls._headers(), data=data)
         item = handle_response(response)
         return cls._from_item(item)
+
+    def _send(self):
+        url = '/'.join([self._base_url, self.parent._name,
+                        str(getattr(self, self.parent_id_attr)),
+                        self.child._name, str(self.Id)])
+        data = self._to_data()
+        response = requests.put(url, headers=self._headers(), data=data)
 
     @classmethod
     def get(cls, ParentId, Id):
@@ -208,15 +212,45 @@ class Advertiser(Base):
 
 class Flight(Base):
     _name = 'flight'
-    _fields = {'Name', 'StartDate', 'EndDate', 'NoEndDate', 'Price',
-               'OptionType', 'Impressions', 'IsUnlimited', 'IsNoDuplicates',
-               'IsFullSpeed', 'Keywords', 'UserAgentKeywords', 'CampaignId',
-               'PriorityId', 'IsDeleted', 'IsActive', 'GoalType', 'RateType',
-               'IsFreqCap', 'FreqCap', 'FreqCapDuration', 'FreqCapType',
-               'DatePartingStartTime', 'DatePartingEndTime', 'IsSunday',
-               'IsMonday', 'IsTuesday', 'IsWednesday', 'IsThursday', 'IsFriday',
-               'IsSaturday', 'IPTargeting', 'GeoTargeting', 'CreativeMaps',
-               'ReferrerKeywords', 'WeightOverride'}
+    _fields = {
+        'Name',
+        'StartDate',
+        'EndDate',
+        'NoEndDate',
+        'Price',
+        'OptionType',
+        'Impressions',
+        'IsUnlimited',
+        'IsNoDuplicates',
+        'IsFullSpeed',
+        'Keywords',
+        'UserAgentKeywords',
+        'CampaignId',
+        'PriorityId',
+        'IsDeleted',
+        'IsActive',
+        'GoalType',
+        'RateType',
+        'IsFreqCap',
+        'FreqCap',
+        'FreqCapDuration',
+        'FreqCapType',
+        'DatePartingStartTime',
+        'DatePartingEndTime',
+        'IsSunday',
+        'IsMonday',
+        'IsTuesday',
+        'IsWednesday',
+        'IsThursday',
+        'IsFriday',
+        'IsSaturday',
+        'IPTargeting',
+        'GeoTargeting',
+        'CreativeMaps',
+        'ReferrerKeywords',
+        'WeightOverride',
+    }
+
     _optional = {'EndDate', 'NoEndDate', 'IsNoDuplicates', 'GoalType',
                  'RateType', 'IsFreqCap', 'FreqCap', 'FreqCapDuration',
                  'FreqCapType', 'Keywords', 'UserAgentKeywords',
@@ -229,24 +263,11 @@ class Flight(Base):
     # _send from results of list doesn't work?
     # maybe need a _can_send property
 
-    @property
-    def frequency_cap(self):
-        if not self.IsFreqCap:
-            return None
-        return '%s per %s %s' % (self.FreqCap, self.FreqCapDuration,
-                                 freq_cap_types[self.FreqCapType])
-
-    def set_daily_cap(self, impressions):
-        self.IsFreqCap = True
-        self.FreqCapType = 2
-        self.FreqCap = impressions
-        self.FreqCapDuration = 1
-
     @classmethod
     def _from_item(cls, item):
         if not 'Name' in item:
             item['Name'] = ''   # response doesn't always include, is it optional?
-        if not 'CreativeMaps' in item:
+        if not 'CreativeMaps' in item or not item['CreativeMaps']:
             item['CreativeMaps'] = []
         thing = super(cls, cls)._from_item(item)
         if hasattr(thing, 'CreativeMaps'):
@@ -297,6 +318,7 @@ class Creative(Base):
 
 class CreativeFlightMap(Map):
     parent = Flight
+    parent_id_attr = 'FlightId'
     child = Creative
 
     _name = 'creative'
@@ -305,6 +327,18 @@ class CreativeFlightMap(Map):
                'Impressions', 'SiteId', 'ZoneId', 'DistributionType'}
     _optional = {'SiteId', 'ZoneId'}
 
+    def __setattr__(self, attr, val):
+        if attr == 'Creative':
+            # Creative could be a full object or just a stub
+            d = val
+            Id = d.pop('Id')
+            if d:
+                val = Creative(Id, **d)
+            else:
+                val = Stub(Id)
+        Map.__setattr__(self, attr, val)
+
+
     @classmethod
     def _from_item(cls, item):
         if not 'SizeOverride' in item:
@@ -312,18 +346,11 @@ class CreativeFlightMap(Map):
         if not 'Iframe' in item:
             item['Iframe'] = False
         thing = super(cls, cls)._from_item(item)
-        if hasattr(thing, 'Creative'):
-            thing.Creative = Creative._from_item(thing.Creative)
         return thing
 
     def _to_item(self):
         item = Base._to_item(self)
-        creative = item.get('Creative')
-        if creative:
-            if creative.Id:
-                item['Creative'] = {'Id': creative.Id}
-            else:
-                item['Creative'] = creative._to_item()
+        item['Creative'] = item['Creative']._to_item()
         return item
 
     def __repr__(self):
@@ -367,7 +394,7 @@ class Campaign(Base):
 
     @classmethod
     def _from_item(cls, item):
-        if not 'Flights' in item:
+        if not 'Flights' in item or not item['Flights']:
             item['Flights'] = []
         thing = super(cls, cls)._from_item(item)
         if hasattr(thing, 'Flights'):
