@@ -64,11 +64,26 @@ class Field(object):
         self.optional = optional
 
 
+class FieldSet(object):
+    def __init__(self, *fields):
+        self.fields = {field.name for field in fields}
+        self.essentials = {field.name for field in fields if not field.optional}
+
+    def to_set(self, exclude_optional=True):
+        if exclude_optional:
+            return self.essentials
+        else:
+            return self.fields
+
+    def __iter__(self):
+        for field_name in self.fields:
+            yield field_name
+
+
 class Base(object):
     _name = ''
     _base_url = 'http://api.adzerk.net/v1'
-    _fields = set()
-    _optional = set()
+    _fields = FieldSet()
 
     @classmethod
     def _headers(cls):
@@ -77,7 +92,7 @@ class Base(object):
 
     def __init__(self, Id, **attr):
         self.Id = Id
-        missing = self._fields - set(attr.keys()) - self._optional
+        missing = self._fields.to_set() - set(attr.keys())
         if missing:
             missing = ', '.join(missing)
             raise ValueError('missing required attributes: %s' % missing)
@@ -182,8 +197,12 @@ class Map(Base):
 
 class Site(Base):
     _name = 'site'
-    _fields = {'Url', 'Title', 'PublisherAccountId', 'IsDeleted'}
-    _optional = {'PublisherAccountId'}
+    _fields = FieldSet(
+        Field('Url'),
+        Field('Title'),
+        Field('PublisherAccountId', optional=True),
+        Field('IsDeleted'),
+    )
 
     def __repr__(self):
         return '<Site %s <%s-%s>>' % (self.Id, self.Title, self.Url)
@@ -191,7 +210,10 @@ class Site(Base):
 
 class Zone(Base):
     _name = 'zone'
-    _fields = {'Name', 'SiteId'}
+    _fields = FieldSet(
+        Field('Name'),
+        Field('SiteId'),
+    )
 
     def __repr__(self):
         return '<Zone %s <%s on Site %s>>' % (self.Id, self.Name, self.SiteId)
@@ -199,8 +221,11 @@ class Zone(Base):
 
 class Advertiser(Base):
     _name = 'advertiser'
-    _fields = {'Title', 'IsActive', 'IsDeleted'}
-    _optional = {'IsActive', 'IsDeleted'}
+    _fields = FieldSet(
+        Field('Title'),
+        Field('IsActive', optional=True),
+        Field('IsDeleted', optional=True),
+    )
 
     @classmethod
     def search(cls, Title):
@@ -212,52 +237,44 @@ class Advertiser(Base):
 
 class Flight(Base):
     _name = 'flight'
-    _fields = {
-        'Name',
-        'StartDate',
-        'EndDate',
-        'NoEndDate',
-        'Price',
-        'OptionType',
-        'Impressions',
-        'IsUnlimited',
-        'IsNoDuplicates',
-        'IsFullSpeed',
-        'Keywords',
-        'UserAgentKeywords',
-        'CampaignId',
-        'PriorityId',
-        'IsDeleted',
-        'IsActive',
-        'GoalType',
-        'RateType',
-        'IsFreqCap',
-        'FreqCap',
-        'FreqCapDuration',
-        'FreqCapType',
-        'DatePartingStartTime',
-        'DatePartingEndTime',
-        'IsSunday',
-        'IsMonday',
-        'IsTuesday',
-        'IsWednesday',
-        'IsThursday',
-        'IsFriday',
-        'IsSaturday',
-        'IPTargeting',
-        'GeoTargeting',
-        'CreativeMaps',
-        'ReferrerKeywords',
-        'WeightOverride',
-    }
-
-    _optional = {'EndDate', 'NoEndDate', 'IsNoDuplicates', 'GoalType',
-                 'RateType', 'IsFreqCap', 'FreqCap', 'FreqCapDuration',
-                 'FreqCapType', 'Keywords', 'UserAgentKeywords',
-                 'DatePartingStartTime', 'DatePartingEndTime', 'IsSunday',
-                 'IsMonday', 'IsTuesday', 'IsWednesday', 'IsThursday',
-                 'IsFriday', 'IsSaturday', 'IPTargeting', 'GeoTargeting',
-                 'CreativeMaps', 'ReferrerKeywords', 'WeightOverride'}
+    _fields = FieldSet(
+        Field('Name'),
+        Field('StartDate'),
+        Field('EndDate', optional=True),
+        Field('NoEndDate', optional=True),
+        Field('Price'),
+        Field('OptionType'),
+        Field('Impressions'),
+        Field('IsUnlimited'),
+        Field('IsNoDuplicates', optional=True),
+        Field('IsFullSpeed'),
+        Field('Keywords', optional=True),
+        Field('UserAgentKeywords', optional=True),
+        Field('CampaignId'),
+        Field('PriorityId'),
+        Field('IsDeleted'),
+        Field('IsActive'),
+        Field('GoalType', optional=True),
+        Field('RateType', optional=True),
+        Field('IsFreqCap', optional=True),
+        Field('FreqCap', optional=True),
+        Field('FreqCapDuration', optional=True),
+        Field('FreqCapType', optional=True),
+        Field('DatePartingStartTime', optional=True),
+        Field('DatePartingEndTime', optional=True),
+        Field('IsSunday', optional=True),
+        Field('IsMonday', optional=True),
+        Field('IsTuesday', optional=True),
+        Field('IsWednesday', optional=True),
+        Field('IsThursday', optional=True),
+        Field('IsFriday', optional=True),
+        Field('IsSaturday', optional=True),
+        Field('IPTargeting', optional=True),
+        Field('GeoTargeting', optional=True),
+        Field('CreativeMaps', optional=True), # Not always included in adzerk response, should probably be a special stub to indicate that
+        Field('ReferrerKeywords', optional=True),
+        Field('WeightOverride', optional=True),
+    )
 
     # list doesn't return CreativeMaps
     # _send from results of list doesn't work?
@@ -288,7 +305,12 @@ class Flight(Base):
 
 class Priority(Base):
     _name = 'priority'
-    _fields = {'Name', 'ChannelId', 'Weight', 'IsDeleted'}
+    _fields = FieldSet(
+        Field('Name'),
+        Field('ChannelId'),
+        Field('Weight'),
+        Field('IsDeleted'),
+    )
 
     def __repr__(self):
         return '<Priority %s <Weight %s - Channel %s>>' % (self.Id, self.Weight,
@@ -297,10 +319,20 @@ class Priority(Base):
 
 class Creative(Base):
     _name = 'creative'
-    _fields = {'Title', 'Body', 'Url', 'AdvertiserId', 'AdTypeId', 'ImageName',
-               'Alt', 'IsHTMLJS', 'ScriptBody', 'IsSync', 'IsDeleted',
-               'IsActive'}
-    _optional = {'Url', 'ScriptBody', 'IsHTMLJS', 'ImageName'}
+    _fields = FieldSet(
+        Field('Title'),
+        Field('Body'),
+        Field('Url', optional=True),
+        Field('AdvertiserId'),
+        Field('AdTypeId'),
+        Field('ImageName', optional=True),
+        Field('Alt'),
+        Field('IsHTMLJS', optional=True),
+        Field('ScriptBody', optional=True),
+        Field('IsSync'),
+        Field('IsDeleted'),
+        Field('IsActive'),
+    )
 
     @classmethod
     def list(cls, AdvertiserId):
@@ -322,10 +354,21 @@ class CreativeFlightMap(Map):
     child = Creative
 
     _name = 'creative'
-    _fields = {'SizeOverride', 'CampaignId', 'PublisherAccountId', 'IsDeleted',
-               'Percentage', 'Iframe', 'Creative', 'IsActive', 'FlightId',
-               'Impressions', 'SiteId', 'ZoneId', 'DistributionType'}
-    _optional = {'SiteId', 'ZoneId'}
+    _fields = FieldSet(
+        Field('SizeOverride'),  # Not always included in adzerk response
+        Field('CampaignId'),
+        Field('PublisherAccountId'),
+        Field('IsDeleted'),
+        Field('Percentage'),
+        Field('Iframe'), # Not always included in adzerk response
+        Field('Creative'),
+        Field('IsActive'),
+        Field('FlightId'),
+        Field('Impressions'),
+        Field('SiteId', optional=True),
+        Field('ZoneId', optional=True),
+        Field('DistributionType'),
+    )
 
     def __setattr__(self, attr, val):
         if attr == 'Creative':
@@ -338,11 +381,10 @@ class CreativeFlightMap(Map):
                 val = Stub(Id)
         Map.__setattr__(self, attr, val)
 
-
     @classmethod
     def _from_item(cls, item):
         if not 'SizeOverride' in item:
-            item['SizeOverride'] = False    # response doesn't always include, is it optional?
+            item['SizeOverride'] = False
         if not 'Iframe' in item:
             item['Iframe'] = False
         thing = super(cls, cls)._from_item(item)
@@ -363,8 +405,15 @@ class CreativeFlightMap(Map):
 
 class Channel(Base):
     _name = 'channel'
-    _fields = {'Title', 'Commission', 'Engine', 'Keywords', 'CPM', 'AdTypes',
-               'IsDeleted'}
+    _fields = FieldSet(
+        Field('Title'),
+        Field('Commission'), 
+        Field('Engine'), 
+        Field('Keywords'), 
+        Field('CPM'), 
+        Field('AdTypes'),
+        Field('IsDeleted'),
+    )
 
     def __repr__(self):
         return '<Channel %s>' % (self.Id)
@@ -372,13 +421,16 @@ class Channel(Base):
 
 class Publisher(Base):
     _name = 'publisher'
-    _fields = {'FirstName', 'LastName', 'CompanyName', 'PaypalEmail',
-               'PaymentOption', 'Address', 'IsDeleted'}
-    _optional = {'FirstName', 'LastName', 'CompanyName', 'PaypalEmail',
-                 'PaymentOption', 'Address'}
+    _fields = FieldSet(
+        Field('FirstName', optional=True),
+        Field('LastName', optional=True),
+        Field('CompanyName', optional=True),
+        Field('PaypalEmail', optional=True),
+        Field('PaymentOption', optional=True),
+        Field('Address', optional=True),
+        Field('IsDeleted'),
+    )
     # are these actually optional?
-    # LastName, PaymentOption, PaypalEmail, FirstName, Address
-    # undocumented IsDeleted
 
     def __repr__(self):
         return '<Publisher %s>' % (self.Id)
@@ -386,11 +438,16 @@ class Publisher(Base):
 
 class Campaign(Base):
     _name = 'campaign'
-    _fields = {'Name', 'AdvertiserId', 'Flights', 'StartDate', 'EndDate',
-               'IsDeleted', 'IsActive', 'Price'}
-    _optional = {'EndDate'}
-
-    # no longer sending Flights?
+    _fields = FieldSet(
+        Field('Name'),
+        Field('AdvertiserId'),
+        Field('Flights'),   # Not always included in adzerk response
+        Field('StartDate'),
+        Field('EndDate', optional=True),
+        Field('IsDeleted'),
+        Field('IsActive'),
+        Field('Price'),
+    )
 
     @classmethod
     def _from_item(cls, item):
