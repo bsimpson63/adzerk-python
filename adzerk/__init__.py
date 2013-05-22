@@ -271,6 +271,7 @@ class Flight(Base):
         Field('IsSaturday', optional=True),
         Field('IPTargeting', optional=True),
         Field('GeoTargeting', optional=True),
+        Field('SiteZoneTargeting', optional=True),  # Is this actually optional?
         Field('CreativeMaps', optional=True), # Not always included in adzerk response, should probably be a special stub to indicate that
         Field('ReferrerKeywords', optional=True),
         Field('WeightOverride', optional=True),
@@ -468,3 +469,4 @@ class Campaign(Base):
 
     def __repr__(self):
         return '<Campaign %s>' % (self.Id)
+
